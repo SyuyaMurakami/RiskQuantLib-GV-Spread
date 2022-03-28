@@ -11,18 +11,11 @@ from scipy import interpolate
 from scipy.interpolate import make_interp_spline
 import sys,os
 from RiskQuantLib.Tool.strTool import isTradingDate,getLastTradingDate
-path = sys.path[0]
-
-
-shibor_rate = pd.read_csv(path+os.sep+'shibor.csv',index_col=0,encoding='GBK')
-options_data = pd.read_csv(path+os.sep+'options.csv',index_col=0)
-tradeday = pd.read_csv(path+os.sep+'tradeday.csv')
-true_ivix = pd.read_csv(path+os.sep+'ivixx.csv')
 
 #==============================================================================
 # 开始计算ivix部分
 #==============================================================================
-def periodsSplineRiskFreeInterestRate(options, date):
+def periodsSplineRiskFreeInterestRate(options, date, shibor_rate):
     """
     params: options: 计算VIX的当天的options数据用来获取expDate
             date: 计算哪天的VIX
@@ -265,7 +258,7 @@ def changeste(t):
     str_t = t.strftime('%Y/%m/%d ')+'00:00'
     return str_t
 
-def calDayVIX(vixDate):
+def calDayVIX(vixDate,options_data,shibor_rate):
     # 利用CBOE的计算方法，计算历史某一日的未来30日期权波动率指数VIX
     """
     params：vixDate：计算VIX的日期  '%Y/%m/%d' 字符串格式
@@ -276,7 +269,7 @@ def calDayVIX(vixDate):
     # 拿取所需期权信息
     options = getHistDayOptions(vixDate,options_data)
     near, nexts = getNearNextOptExpDate(options, vixDate)
-    shibor = periodsSplineRiskFreeInterestRate(options, vixDate)
+    shibor = periodsSplineRiskFreeInterestRate(options, vixDate,shibor_rate)
     R_near = shibor[datetime(near.year,near.month,near.day)]
     R_next = shibor[datetime(nexts.year,nexts.month,nexts.day)]
 
@@ -315,26 +308,34 @@ def calDayVIX(vixDate):
     return vix,gvix
 
 
+def calGVSpread():
+    path = sys.path[0]
 
-ivix = []
-givix = []
-for day in tradeday['DateTime']:
-    dayResult = calDayVIX(day)
-    ivix.append(dayResult[0])
-    givix.append(dayResult[1])
-    #print ivix
-    
-from pyecharts import Line
-attr = true_ivix[u'日期'].tolist()
-line = Line(u"中国波指")
-line.add("中证指数发布", attr, true_ivix[u'收盘价(元)'].tolist(), mark_point=["max"])
-line.add("手动计算", tradeday['DateTime'].to_list(), ivix, mark_line=["max",'average'])
-line.render('vix.html')
+    shibor_rate = pd.read_csv(path + os.sep + 'shibor.csv', index_col=0, encoding='GBK')
+    options_data = pd.read_csv(path + os.sep + 'options.csv', index_col=0)
+    tradeday = pd.read_csv(path + os.sep + 'tradeday.csv')
+    true_ivix = pd.read_csv(path + os.sep + 'ivixx.csv')
 
-# 输出df
-result = pd.DataFrame([ivix,givix],index=['IVIX','GIVIX'],columns=tradeday['DateTime'].to_list()).T
-result['GV-Spread'] = result['GIVIX'] - result['IVIX']
-result.to_excel(path+os.sep+'IVIX.xlsx')
+
+    ivix = []
+    givix = []
+    for day in tradeday['DateTime']:
+        dayResult = calDayVIX(day,options_data,shibor_rate)
+        ivix.append(dayResult[0])
+        givix.append(dayResult[1])
+        #print ivix
+
+    from pyecharts import Line
+    attr = true_ivix[u'日期'].tolist()
+    line = Line(u"中国波指")
+    line.add("中证指数发布", attr, true_ivix[u'收盘价(元)'].tolist(), mark_point=["max"])
+    line.add("手动计算", tradeday['DateTime'].to_list(), ivix, mark_line=["max",'average'])
+    line.render('vix.html')
+
+    # 输出df
+    result = pd.DataFrame([ivix,givix],index=['IVIX','GIVIX'],columns=tradeday['DateTime'].to_list()).T
+    result['GV-Spread'] = result['GIVIX'] - result['IVIX']
+    result.to_excel(path+os.sep+'IVIX.xlsx')
 
 
 
